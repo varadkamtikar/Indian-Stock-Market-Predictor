@@ -9,6 +9,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from fetcher import get_stock_data
+from news import get_stock_news, sentiment_score, sentiment_label
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from tensorflow.keras.models import Sequential
@@ -384,9 +385,13 @@ for col, label, value, delta, cls in [
 st.markdown("")
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(
-    ["📊  Price & Volume", "📉  Technical Indicators", "🤖  LSTM Prediction"]
-)
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊  Price & Volume",
+    "📉  Technical Indicators",
+    "🤖  LSTM Prediction",
+    "📰  News & Sentiment",
+    "💼  Portfolio",
+])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 1 · Price & Volume
@@ -694,6 +699,267 @@ with tab3:
             """,
                 unsafe_allow_html=True,
             )
+
+        # ── Model Comparison ──────────────────────────────────────────────────
+        st.markdown("")
+        with st.expander("📊  Baseline Model Comparison", expanded=False):
+            close_s = pd.Series(df_close, index=df_index)
+            sma20_full = close_s.rolling(20).mean()
+            ema20_full = close_s.ewm(span=20, adjust=False).mean()
+
+            sma_test = sma20_full.iloc[train_size:].values
+            ema_test = ema20_full.iloc[train_size:].values
+            actual_arr = actual.flatten()
+
+            def _metrics(y_true, y_pred):
+                mask = ~np.isnan(y_pred)
+                yt, yp = y_true[mask], y_pred[mask]
+                return (
+                    mean_absolute_error(yt, yp),
+                    math.sqrt(mean_squared_error(yt, yp)),
+                    float(np.mean(np.abs((yt - yp) / yt)) * 100),
+                )
+
+            sma_mae, sma_rmse, sma_mape = _metrics(actual_arr, sma_test)
+            ema_mae, ema_rmse, ema_mape = _metrics(actual_arr, ema_test)
+
+            # Comparison chart
+            fig_cmp = go.Figure()
+            fig_cmp.add_trace(go.Scatter(
+                x=test_index, y=actual_arr,
+                line=dict(color="#e8ecf0", width=2), name="Actual",
+            ))
+            fig_cmp.add_trace(go.Scatter(
+                x=test_index, y=preds.flatten(),
+                line=dict(color="#60a5fa", width=2, dash="dot"), name="LSTM",
+            ))
+            fig_cmp.add_trace(go.Scatter(
+                x=test_index, y=sma_test,
+                line=dict(color="#f59e0b", width=1.5, dash="dash"), name="SMA-20",
+            ))
+            fig_cmp.add_trace(go.Scatter(
+                x=test_index, y=ema_test,
+                line=dict(color="#a78bfa", width=1.5, dash="dash"), name="EMA-20",
+            ))
+            fig_cmp = apply_theme(fig_cmp, 380, "LSTM vs Baseline Models — Test Period")
+            fig_cmp.update_layout(
+                legend=dict(orientation="h", y=1.02, x=1, xanchor="right"),
+                yaxis_title="Price (₹)",
+            )
+            st.plotly_chart(fig_cmp, use_container_width=True)
+
+            # Metrics table
+            cmp_df = pd.DataFrame([
+                {"Model": "🤖 LSTM (3-layer stacked)", "MAE (₹)": round(mae, 2), "RMSE (₹)": round(rmse, 2), "MAPE (%)": round(mape, 2)},
+                {"Model": "📊 SMA-20 Baseline",        "MAE (₹)": round(sma_mae, 2), "RMSE (₹)": round(sma_rmse, 2), "MAPE (%)": round(sma_mape, 2)},
+                {"Model": "📈 EMA-20 Baseline",        "MAE (₹)": round(ema_mae, 2), "RMSE (₹)": round(ema_rmse, 2), "MAPE (%)": round(ema_mape, 2)},
+            ])
+
+            def _highlight_best(s):
+                best = s.min()
+                return ["background-color:#1a3a1a; color:#00d084; font-weight:700"
+                        if v == best else "" for v in s]
+
+            st.dataframe(
+                cmp_df.style.apply(_highlight_best, subset=["MAE (₹)", "RMSE (₹)", "MAPE (%)"]),
+                use_container_width=True, hide_index=True,
+            )
+            st.caption("✅ Green cells = best (lowest error) for each metric.")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 4 · News & Sentiment
+# ─────────────────────────────────────────────────────────────────────────────
+with tab4:
+    with st.spinner("Loading news…"):
+        articles = get_stock_news(ticker)
+
+    if not articles:
+        st.info("No recent news found for this ticker on Yahoo Finance.")
+    else:
+        scores = []
+        enriched = []
+        for a in articles:
+            title = a.get("title", "")
+            sc = sentiment_score(title)
+            scores.append(sc)
+            label, color = sentiment_label(sc)
+            enriched.append({
+                "title": title,
+                "link": a.get("link", "#"),
+                "publisher": a.get("publisher", "Unknown"),
+                "time": datetime.datetime.fromtimestamp(
+                    a.get("providerPublishTime", 0)
+                ).strftime("%d %b %Y, %H:%M"),
+                "score": sc,
+                "label": label,
+                "color": color,
+            })
+
+        avg_score = float(np.mean(scores)) if scores else 0.0
+        overall_label, overall_color = sentiment_label(avg_score)
+
+        # Overall sentiment banner
+        st.markdown(
+            f"""
+            <div style='background:#1e2130;border:1px solid #2d3548;border-radius:12px;
+                        padding:18px 24px;margin-bottom:20px;display:flex;align-items:center;gap:16px'>
+                <div style='font-size:2rem'>{'📈' if avg_score >= 0.05 else ('📉' if avg_score <= -0.05 else '➡️')}</div>
+                <div>
+                    <div style='color:#8b95a1;font-size:0.72rem;font-weight:600;
+                                text-transform:uppercase;letter-spacing:1px'>Overall Sentiment</div>
+                    <div style='color:{overall_color};font-size:1.4rem;font-weight:700'>{overall_label}</div>
+                    <div style='color:#8b95a1;font-size:0.78rem'>
+                        Avg VADER score: {avg_score:+.3f} &nbsp;·&nbsp; Based on {len(articles)} articles
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # News cards — 2 columns
+        left_col, right_col = st.columns(2)
+        for i, art in enumerate(enriched):
+            col = left_col if i % 2 == 0 else right_col
+            with col:
+                st.markdown(
+                    f"""
+                    <div style='background:#1e2130;border:1px solid #2d3548;border-radius:10px;
+                                padding:14px 16px;margin-bottom:12px;'>
+                        <a href="{art['link']}" target="_blank"
+                           style='color:#e8ecf0;font-weight:600;font-size:0.88rem;
+                                  text-decoration:none;line-height:1.4'>
+                            {art['title']}
+                        </a>
+                        <div style='margin-top:10px;display:flex;justify-content:space-between;align-items:center'>
+                            <span style='color:#8b95a1;font-size:0.72rem'>
+                                {art['publisher']} &nbsp;·&nbsp; {art['time']}
+                            </span>
+                            <span style='background:{art['color']}22;color:{art['color']};
+                                         font-size:0.7rem;font-weight:700;padding:2px 8px;
+                                         border-radius:4px;border:1px solid {art['color']}55'>
+                                {art['label']}
+                            </span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5 · Portfolio Tracker
+# ─────────────────────────────────────────────────────────────────────────────
+with tab5:
+    st.markdown("#### Select stocks to compare")
+    portfolio_names = st.multiselect(
+        "Choose 2–10 stocks from the current exchange",
+        options=list(stock_dict.keys()),
+        default=list(stock_dict.keys())[:5],
+        max_selections=10,
+        key="portfolio_select",
+    )
+
+    if len(portfolio_names) < 2:
+        st.warning("Select at least 2 stocks to build a portfolio view.")
+    else:
+        with st.spinner("Fetching portfolio data…"):
+            port_close = {}
+            for name in portfolio_names:
+                t = stock_dict[name]
+                d = get_stock_data(t, str(start_date), str(end_date))
+                if not d.empty:
+                    label = name.rsplit("(", 1)[0].strip()
+                    port_close[label] = d["Close"].astype(float)
+
+        if len(port_close) < 2:
+            st.error("Could not fetch data for enough stocks.")
+        else:
+            port_df = pd.DataFrame(port_close).dropna(how="all")
+            port_df = port_df.ffill().dropna()
+
+            # ── Normalized performance ────────────────────────────────────────
+            st.markdown('<div class="section-title">📈  Normalized Performance (base = 100)</div>',
+                        unsafe_allow_html=True)
+            norm = port_df.div(port_df.iloc[0]) * 100
+            fig_norm = go.Figure()
+            palette = ["#60a5fa","#f59e0b","#00d084","#a78bfa","#ff4b4b",
+                       "#34d399","#fb923c","#e879f9","#38bdf8","#facc15"]
+            for j, col_name in enumerate(norm.columns):
+                fig_norm.add_trace(go.Scatter(
+                    x=norm.index, y=norm[col_name],
+                    name=col_name,
+                    line=dict(color=palette[j % len(palette)], width=2),
+                ))
+            fig_norm.add_hline(y=100, line_dash="dot", line_color="#4a5568")
+            fig_norm = apply_theme(fig_norm, 420, "")
+            fig_norm.update_layout(
+                legend=dict(orientation="h", y=1.02, x=1, xanchor="right"),
+                yaxis_title="Indexed Value",
+            )
+            st.plotly_chart(fig_norm, use_container_width=True)
+
+            # ── Returns & volatility table ────────────────────────────────────
+            def _ret(series, days):
+                s = series.dropna()
+                if len(s) < days:
+                    return None
+                return round((s.iloc[-1] / s.iloc[-days] - 1) * 100, 2)
+
+            st.markdown('<div class="section-title">📊  Returns & Volatility</div>',
+                        unsafe_allow_html=True)
+            rows = []
+            for col_name, series in port_close.items():
+                series = series.dropna()
+                daily_ret = series.pct_change().dropna()
+                ann_vol = round(float(daily_ret.std() * np.sqrt(252) * 100), 2)
+                rows.append({
+                    "Stock": col_name,
+                    "Current (₹)": f"₹{float(series.iloc[-1]):,.2f}",
+                    "1W (%)": _ret(series, 5),
+                    "1M (%)": _ret(series, 21),
+                    "3M (%)": _ret(series, 63),
+                    "1Y (%)": _ret(series, 252),
+                    "Ann. Volatility (%)": ann_vol,
+                })
+            ret_df = pd.DataFrame(rows)
+
+            def _color_ret(val):
+                if isinstance(val, float):
+                    return "color: #00d084" if val > 0 else "color: #ff4b4b"
+                return ""
+
+            st.dataframe(
+                ret_df.style.map(
+                    _color_ret,
+                    subset=["1W (%)", "1M (%)", "3M (%)", "1Y (%)"]
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # ── Correlation heatmap ───────────────────────────────────────────
+            st.markdown('<div class="section-title">🔗  Return Correlation Matrix</div>',
+                        unsafe_allow_html=True)
+            returns_df = port_df.pct_change().dropna()
+            corr = returns_df.corr().round(2)
+            labels = list(corr.columns)
+
+            fig_corr = go.Figure(go.Heatmap(
+                z=corr.values,
+                x=labels,
+                y=labels,
+                colorscale="RdBu",
+                reversescale=True,
+                zmin=-1, zmax=1,
+                text=corr.values.round(2),
+                texttemplate="%{text}",
+                textfont=dict(size=11),
+                colorbar=dict(title="r", thickness=12),
+            ))
+            fig_corr = apply_theme(fig_corr, 420, "")
+            fig_corr.update_layout(margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig_corr, use_container_width=True)
+            st.caption("Values close to +1 = move together · close to -1 = move opposite · ~0 = uncorrelated")
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("---")
