@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="NSE Stock Predictor | LSTM",
+    page_title="Indian Stock Market Predictor | LSTM",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -101,12 +101,44 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 }
 
 footer { visibility: hidden; }
+
+.exchange-badge-nse {
+    display: inline-block;
+    background: linear-gradient(135deg, #1a3a6e, #1e4d9e);
+    border: 1px solid #2563eb;
+    color: #93c5fd;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.exchange-badge-bse {
+    display: inline-block;
+    background: linear-gradient(135deg, #6e1a1a, #9e2e1e);
+    border: 1px solid #dc2626;
+    color: #fca5a5;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.index-label {
+    color: #8b95a1;
+    font-size: 0.85rem;
+    vertical-align: middle;
+}
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-# ── NSE stock universe ─────────────────────────────────────────────────────────
+# ── Stock universes ────────────────────────────────────────────────────────────
 NSE_STOCKS = {
     "Reliance Industries": "RELIANCE.NS",
     "Tata Consultancy Services": "TCS.NS",
@@ -128,6 +160,61 @@ NSE_STOCKS = {
     "Bharti Airtel": "BHARTIARTL.NS",
     "Sun Pharmaceutical": "SUNPHARMA.NS",
     "HCL Technologies": "HCLTECH.NS",
+    "Mahindra & Mahindra": "M&M.NS",
+    "Titan Company": "TITAN.NS",
+    "Tech Mahindra": "TECHM.NS",
+    "Bajaj Finserv": "BAJAJFINSV.NS",
+    "Tata Steel": "TATASTEEL.NS",
+}
+
+BSE_STOCKS = {
+    "Reliance Industries": "RELIANCE.BO",
+    "Tata Consultancy Services": "TCS.BO",
+    "Infosys": "INFY.BO",
+    "HDFC Bank": "HDFCBANK.BO",
+    "ICICI Bank": "ICICIBANK.BO",
+    "Wipro": "WIPRO.BO",
+    "State Bank of India": "SBIN.BO",
+    "Bajaj Finance": "BAJFINANCE.BO",
+    "Maruti Suzuki": "MARUTI.BO",
+    "Tata Motors": "TATAMOTORS.BO",
+    "Adani Enterprises": "ADANIENT.BO",
+    "Hindustan Unilever": "HINDUNILVR.BO",
+    "ITC": "ITC.BO",
+    "Axis Bank": "AXISBANK.BO",
+    "Kotak Mahindra Bank": "KOTAKBANK.BO",
+    "Larsen & Toubro": "LT.BO",
+    "Asian Paints": "ASIANPAINT.BO",
+    "Bharti Airtel": "BHARTIARTL.BO",
+    "Sun Pharmaceutical": "SUNPHARMA.BO",
+    "HCL Technologies": "HCLTECH.BO",
+    "Mahindra & Mahindra": "M&M.BO",
+    "Titan Company": "TITAN.BO",
+    "Tech Mahindra": "TECHM.BO",
+    "Nestle India": "NESTLEIND.BO",
+    "UltraTech Cement": "ULTRACEMCO.BO",
+    "Power Grid Corporation": "POWERGRID.BO",
+    "NTPC": "NTPC.BO",
+    "IndusInd Bank": "INDUSINDBK.BO",
+    "Bajaj Finserv": "BAJAJFINSV.BO",
+    "Tata Steel": "TATASTEEL.BO",
+}
+
+EXCHANGE_META = {
+    "NSE": {
+        "label": "NSE",
+        "index": "NIFTY 50",
+        "suffix": ".NS",
+        "badge_class": "exchange-badge-nse",
+        "stocks": NSE_STOCKS,
+    },
+    "BSE": {
+        "label": "BSE",
+        "index": "SENSEX",
+        "suffix": ".BO",
+        "badge_class": "exchange-badge-bse",
+        "stocks": BSE_STOCKS,
+    },
 }
 
 LOOKBACK = 60
@@ -259,12 +346,30 @@ def apply_theme(fig, height: int, title: str = ""):
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📈 NSE Stock Predictor")
+    st.markdown("## 📈 Indian Stock Predictor")
     st.markdown("*LSTM Neural Network · Indian Markets*")
     st.divider()
 
-    selected_name = st.selectbox("Select Stock", list(NSE_STOCKS.keys()))
-    ticker = NSE_STOCKS[selected_name]
+    exchange = st.radio(
+        "Exchange",
+        ["NSE", "BSE"],
+        horizontal=True,
+        help="NSE uses NIFTY 50 stocks · BSE uses SENSEX stocks",
+    )
+    meta = EXCHANGE_META[exchange]
+    stock_dict = meta["stocks"]
+
+    # Clear stale predictions when the user switches exchange or stock
+    prev_exchange = st.session_state.get("_exchange")
+    prev_stock = st.session_state.get("_stock")
+
+    selected_name = st.selectbox("Select Stock", list(stock_dict.keys()))
+    ticker = stock_dict[selected_name]
+
+    if prev_exchange != exchange or prev_stock != selected_name:
+        st.session_state.pop("results", None)
+        st.session_state["_exchange"] = exchange
+        st.session_state["_stock"] = selected_name
 
     st.divider()
     c1, c2 = st.columns(2)
@@ -299,7 +404,12 @@ with st.sidebar:
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(f"# {selected_name}")
-st.markdown(f"**{ticker}** &nbsp;·&nbsp; NSE &nbsp;·&nbsp; India")
+st.markdown(
+    f'<span class="{meta["badge_class"]}">{meta["label"]}</span>'
+    f'<span class="index-label"><b>{ticker}</b> &nbsp;·&nbsp; {meta["index"]} &nbsp;·&nbsp; India</span>',
+    unsafe_allow_html=True,
+)
+st.markdown("")
 
 # ── Fetch & enrich data ───────────────────────────────────────────────────────
 with st.spinner("Fetching market data…"):
@@ -588,7 +698,7 @@ with tab3:
             layer="below",
             line_width=0,
         )
-        fig_p = apply_theme(fig_p, 520, "LSTM Prediction vs Actual · NSE")
+        fig_p = apply_theme(fig_p, 520, f"LSTM Prediction vs Actual · {exchange} · {selected_name}")
         fig_p.update_layout(
             legend=dict(orientation="h", y=1.02, x=1, xanchor="right"),
             yaxis_title="Price (₹)",
@@ -658,7 +768,7 @@ st.markdown("---")
 st.markdown(
     """
 <div style='text-align:center;color:#8b95a1;font-size:0.78rem;padding:8px 0'>
-    NSE Stock Price Predictor &nbsp;·&nbsp; LSTM Neural Network &nbsp;·&nbsp; Indian Stock Market<br>
+    Indian Stock Market Predictor &nbsp;·&nbsp; NSE &amp; BSE &nbsp;·&nbsp; LSTM Neural Network<br>
     ⚠️ For educational purposes only — not financial advice.
 </div>
 """,
