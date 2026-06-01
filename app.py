@@ -779,21 +779,10 @@ with tab4:
         scores = []
         enriched = []
         for a in articles:
-            title = a.get("title", "")
-            sc = sentiment_score(title)
+            sc = sentiment_score(a["title"])
             scores.append(sc)
             label, color = sentiment_label(sc)
-            enriched.append({
-                "title": title,
-                "link": a.get("link", "#"),
-                "publisher": a.get("publisher", "Unknown"),
-                "time": datetime.datetime.fromtimestamp(
-                    a.get("providerPublishTime", 0)
-                ).strftime("%d %b %Y, %H:%M"),
-                "score": sc,
-                "label": label,
-                "color": color,
-            })
+            enriched.append({**a, "score": sc, "label": label, "color": color})
 
         avg_score = float(np.mean(scores)) if scores else 0.0
         overall_label, overall_color = sentiment_label(avg_score)
