@@ -138,80 +138,19 @@ footer { visibility: hidden; }
     unsafe_allow_html=True,
 )
 
-# ── Stock universes ────────────────────────────────────────────────────────────
-NSE_STOCKS = {
-    "Reliance Industries": "RELIANCE.NS",
-    "Tata Consultancy Services": "TCS.NS",
-    "Infosys": "INFY.NS",
-    "HDFC Bank": "HDFCBANK.NS",
-    "ICICI Bank": "ICICIBANK.NS",
-    "Wipro": "WIPRO.NS",
-    "State Bank of India": "SBIN.NS",
-    "Bajaj Finance": "BAJFINANCE.NS",
-    "Maruti Suzuki": "MARUTI.NS",
-    "Tata Motors": "TATAMOTORS.NS",
-    "Adani Enterprises": "ADANIENT.NS",
-    "Hindustan Unilever": "HINDUNILVR.NS",
-    "ITC": "ITC.NS",
-    "Axis Bank": "AXISBANK.NS",
-    "Kotak Mahindra Bank": "KOTAKBANK.NS",
-    "Larsen & Toubro": "LT.NS",
-    "Asian Paints": "ASIANPAINT.NS",
-    "Bharti Airtel": "BHARTIARTL.NS",
-    "Sun Pharmaceutical": "SUNPHARMA.NS",
-    "HCL Technologies": "HCLTECH.NS",
-    "Mahindra & Mahindra": "M&M.NS",
-    "Titan Company": "TITAN.NS",
-    "Tech Mahindra": "TECHM.NS",
-    "Bajaj Finserv": "BAJAJFINSV.NS",
-    "Tata Steel": "TATASTEEL.NS",
-}
-
-BSE_STOCKS = {
-    "Reliance Industries": "RELIANCE.BO",
-    "Tata Consultancy Services": "TCS.BO",
-    "Infosys": "INFY.BO",
-    "HDFC Bank": "HDFCBANK.BO",
-    "ICICI Bank": "ICICIBANK.BO",
-    "Wipro": "WIPRO.BO",
-    "State Bank of India": "SBIN.BO",
-    "Bajaj Finance": "BAJFINANCE.BO",
-    "Maruti Suzuki": "MARUTI.BO",
-    "Tata Motors": "TATAMOTORS.BO",
-    "Adani Enterprises": "ADANIENT.BO",
-    "Hindustan Unilever": "HINDUNILVR.BO",
-    "ITC": "ITC.BO",
-    "Axis Bank": "AXISBANK.BO",
-    "Kotak Mahindra Bank": "KOTAKBANK.BO",
-    "Larsen & Toubro": "LT.BO",
-    "Asian Paints": "ASIANPAINT.BO",
-    "Bharti Airtel": "BHARTIARTL.BO",
-    "Sun Pharmaceutical": "SUNPHARMA.BO",
-    "HCL Technologies": "HCLTECH.BO",
-    "Mahindra & Mahindra": "M&M.BO",
-    "Titan Company": "TITAN.BO",
-    "Tech Mahindra": "TECHM.BO",
-    "Nestle India": "NESTLEIND.BO",
-    "UltraTech Cement": "ULTRACEMCO.BO",
-    "Power Grid Corporation": "POWERGRID.BO",
-    "NTPC": "NTPC.BO",
-    "IndusInd Bank": "INDUSINDBK.BO",
-    "Bajaj Finserv": "BAJAJFINSV.BO",
-    "Tata Steel": "TATASTEEL.BO",
-}
+# ── Stock universes (sourced from stocks.py, all tickers verified) ────────────
+from stocks import NSE_STOCKS, BSE_STOCKS
 
 EXCHANGE_META = {
     "NSE": {
         "label": "NSE",
         "index": "NIFTY 50",
-        "suffix": ".NS",
         "badge_class": "exchange-badge-nse",
         "stocks": NSE_STOCKS,
     },
     "BSE": {
         "label": "BSE",
         "index": "SENSEX",
-        "suffix": ".BO",
         "badge_class": "exchange-badge-bse",
         "stocks": BSE_STOCKS,
     },
@@ -403,7 +342,8 @@ with st.sidebar:
     )
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown(f"# {selected_name}")
+display_name = selected_name.rsplit("(", 1)[0].strip()
+st.markdown(f"# {display_name}")
 st.markdown(
     f'<span class="{meta["badge_class"]}">{meta["label"]}</span>'
     f'<span class="index-label"><b>{ticker}</b> &nbsp;·&nbsp; {meta["index"]} &nbsp;·&nbsp; India</span>',
@@ -698,7 +638,7 @@ with tab3:
             layer="below",
             line_width=0,
         )
-        fig_p = apply_theme(fig_p, 520, f"LSTM Prediction vs Actual · {exchange} · {selected_name}")
+        fig_p = apply_theme(fig_p, 520, f"LSTM Prediction vs Actual · {exchange} · {display_name}")
         fig_p.update_layout(
             legend=dict(orientation="h", y=1.02, x=1, xanchor="right"),
             yaxis_title="Price (₹)",
