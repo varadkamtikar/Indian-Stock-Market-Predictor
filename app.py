@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import yfinance as yf
+from fetcher import get_stock_data
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from tensorflow.keras.models import Sequential
@@ -168,14 +168,6 @@ GRID = dict(showgrid=True, gridcolor="#1e2535", zeroline=False)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-@st.cache_data(ttl=3600)
-def fetch_data(ticker: str, start: str, end: str) -> pd.DataFrame:
-    df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    return df
-
-
 def rsi(series: pd.Series, period: int = 14) -> pd.Series:
     d = series.diff()
     gain = d.clip(lower=0).rolling(period).mean()
@@ -353,7 +345,7 @@ st.markdown("")
 
 # ── Fetch & enrich data ───────────────────────────────────────────────────────
 with st.spinner("Fetching market data…"):
-    df = fetch_data(ticker, str(start_date), str(end_date))
+    df = get_stock_data(ticker, str(start_date), str(end_date))
 
 if df.empty:
     st.error("No data returned. Check the ticker or widen the date range.")
