@@ -1,0 +1,30 @@
+name: Daily DB Refresh
+
+on:
+  schedule:
+    # 4:15 PM IST (10:45 UTC) Mon–Fri — 45 min after NSE/BSE close at 3:30 PM IST
+    - cron: "45 10 * * 1-5"
+  workflow_dispatch:   # allow manual trigger from GitHub Actions UI
+
+jobs:
+  refresh:
+    name: Refresh OHLCV data in Neon DB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install yfinance psycopg2-binary pandas
+
+      - name: Run refresh script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/refresh_db.py
