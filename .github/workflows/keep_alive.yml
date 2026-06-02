@@ -1,0 +1,23 @@
+name: Keep App Alive
+
+on:
+  schedule:
+    # 8:00 AM UTC (1:30 PM IST) every day — well within the 7-day sleep limit
+    - cron: "0 8 * * *"
+  workflow_dispatch:   # manual trigger from Actions UI if needed
+
+jobs:
+  ping:
+    name: Ping Streamlit app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake up app
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 \
+            https://indian-stock-market-predictor-varadkamtikar.streamlit.app)
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" -lt 200 ] || [ "$STATUS" -ge 400 ]; then
+            echo "Warning: unexpected status $STATUS"
+            exit 1
+          fi
+          echo "App is alive."
